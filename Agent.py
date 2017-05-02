@@ -45,7 +45,7 @@ class Agent(object):
         index = np.random.randint(0, len(self.state)-self.batchSize+1)
         state = self.state[index:index+self.batchSize]
         action = self.choose_action(state)-1
-        #print(action)
+        print(action)
         #print('----')
         rewards = [float(0)]
         for i in range(1, self.batchSize):

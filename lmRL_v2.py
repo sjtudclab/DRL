@@ -6,7 +6,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from Agent import Agent
+from Agent_v2 import Agent2
 #import argparse
 #import sys
 
@@ -16,19 +16,20 @@ import argparse
 import sys
 import numpy as np
 
-from tensorflow.examples.tutorials.mnist import input_data
+#from tensorflow.examples.tutorials.mnist import input_data
 
 
-class lmmodel(Agent):
+class lmmodel(Agent2):
 
-    def __init__(self, config):
-        super(lmmodel,self).__init__('data/IF1601.CFE.csv', 20, 20, 10)
+    def __init__(self, config,sess):
+        super(lmmodel,self).__init__('data/IF1601.CFE.csv', 20, 20, 5000)
         self.config = config
-        self.sess = tf.InteractiveSession()
+        self.sess =sess
+        #self.sess = tf.InteractiveSession()
         #self.trajecNum=100  #
         #self.batchSize=20   #120 batchSize
         self.inputSize=20  #20features
-        self.stepNum=120   #20 price sequence
+        self.stepNum=20   #20 price sequence
         self.hiddenSize=40 # fully connected outputs
         self.neuronNum=10
         #self.actionsize=3
@@ -136,7 +137,7 @@ class lmmodel(Agent):
             self.critic_value = tf.contrib.layers.fully_connected(
                 inputs=output,
                 num_outputs= 1, #hidden
-                activation_fn= tf.tanh,
+                activation_fn= None,
                 weights_initializer = tf.random_normal_initializer(),
                 biases_initializer = tf.zeros_initializer()
             )
@@ -151,10 +152,10 @@ class lmmodel(Agent):
             #self.grads, _ = tf.clip_by_global_norm(tf.gradients(critic_loss, tvar),5)
             #optimizer = tf.train.GradientDescentOptimizer(0.01)
             #self.critic_train = optimizer.apply_gradients(zip(self.grads, tvar))
-    self.saver = tf.train.Saver(tf.global_variables())
+    #self.saver = tf.train.Saver(tf.global_variables())
 
 
-    def discount_rewards(x, gamma):
+    def discount_rewards(self,x, gamma):
         """
         Given vector x, computes a vector y such that
         y[i] = x[i] + gamma * x[i+1] + gamma^2 x[i+2] + ...
@@ -170,25 +171,33 @@ class lmmodel(Agent):
 
     def learn(self):
         self.merged = tf.summary.merge_all()
-        self.writer = tf.summary.FileWriter("/home/swy/DRL/writer", self.sess.graph) 
+        self.writer = tf.summary.FileWriter("/home/swy/code/DRL/tb", self.sess.graph) 
         trajectories = self.get_trajectories()
+        i=0
         for trajectory in trajectories:
+            i=i+1
             action = trajectory["action"]
             state = trajectory["state"]
-            returns = discount_rewards(trajectory["reward"],0.99)
+            returns = self.discount_rewards(trajectory["reward"],0.99)
             print("returns")
             print(returns)
             qw_new = self.sess.run(self.critic_value,feed_dict={self.states:state})
             qw_new = qw_new.reshape(-1)
+
+            if i%100==0:
+                print("num:%d",i)
+                print(np.sum(trajectory["reward"]))
            
-            criticResults, actorResults = self.sess.run([self.critic_train,self.actor_train],feed_dict={
+            summary,criticResults, actorResults = self.sess.run([self.merged,self.critic_train,self.actor_train],feed_dict={
                 self.critic_target:returns,
                 self.states: state,
                 self.actions_taken: action,
                 self.critic_feedback:qw_new,
                 self.critic_rewards:returns
             })
+            self.writer.add_summary(summary,i)
             #print (criticResults, actorResults)
+        self.writer.close()
 
 
 
@@ -206,9 +215,9 @@ def get_config():
 
 def main():
 
-    if tf.gfile.Exists('/home/swy/DRL/writer'):
-        tf.gfile.DeleteRecursively('/home/swy/DRL/writer')
-    tf.gfile.MakeDirs('/home/swy/DRL/writer')
+    if tf.gfile.Exists('/home/swy/code/DRL/tb'):
+        tf.gfile.DeleteRecursively('/home/swy/code/DRL/tb')
+    tf.gfile.MakeDirs('/home/swy/code/DRL/tb')
 
     config=get_config()
     sess= tf.InteractiveSession()
@@ -216,13 +225,13 @@ def main():
     out = lmmodel(config=config,sess=sess)
     sess.run(tf.global_variables_initializer())
     out.learn()
-    saver = tf.train.Saver(tf.global_variables())
-    save_path = out.saver.save(sess, '/home/swy/DRL/saver')
+    #saver = tf.train.Saver(tf.global_variables())
+    save_path = out.saver.save(sess, '/home/swy/code/DRL/cp/model.ckpt')
 
 
-   # out = lmmodel(config=config,sess=sess)
-   # load_path = out.saver.restore(sess,'/home/swy/DRL/saver')
-   # out.learn()
+    #out = lmmodel(config=config,sess=sess)
+    #load_path = out.saver.restore(sess,'/home/swy/DRL/saver')
+    #out.learn()
             #out=sess.run(out.train_step,feed_dict=feed_dict())
 
 
