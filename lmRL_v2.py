@@ -126,8 +126,8 @@ class lmmodel(Agent2):
                     outputs.append(tf.reshape(output,[-1]))
                     tf.get_variable_scope().reuse_variables()  
 
-            print("critic")
-            print(np.shape(outputs))
+            #print("critic")
+            #print(np.shape(outputs))
             output=outputs
             #output = tf.reshape(tf.concat(axis=1, values=outputs), [-1, 10])
 
@@ -174,8 +174,9 @@ class lmmodel(Agent2):
         self.writer = tf.summary.FileWriter("/home/swy/code/DRL/tb", self.sess.graph) 
         trajectories = self.get_trajectories()
         i=0
-        for trajectory in trajectories:
-            i=i+1
+        #for trajectory in trajectories:
+        for i in range(10000):
+            trajectory = self.get_trajectory()
             action = trajectory["action"]
             state = trajectory["state"]
             returns = self.discount_rewards(trajectory["reward"],0.99)

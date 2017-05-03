@@ -41,16 +41,16 @@ class Agent2(object):
 
 
 
-    def get_trajectory(self,index):
-       
+    def get_trajectory(self):
+        index = np.random.randint(0, len(self.state)-self.batchSize+1)
         state = self.state[index:index+self.batchSize]
         #print("state")
         #print(np.shape(state))
         action = self.choose_action(state)
-        print(action)
-        print('----')
+        #print(action)
+        #print('----')
         action = action -1
-        print(action)
+        #print(action)
         rewards = [float(0)]
         for i in range(1, self.batchSize):
             rew = action[i-1] * state[i][-1] - 1 * abs(action[i]-action[i-1])
@@ -64,14 +64,14 @@ class Agent2(object):
                 }
 
     def get_trajectories(self):
-        #index = np.random.randint(0, len(self.state)-self.batchSize+1)
+        #
         index=10
         trajectories = []
         i=0
         #while i < self.trajecNum and index<=len(self.state)-self.batchSize+1:
         while i < self.trajecNum:
             i += 1
-            trajectory = self.get_trajectory(index)
+            trajectory = self.get_trajectory()
             index +=1
             trajectories.append(trajectory)
         return trajectories

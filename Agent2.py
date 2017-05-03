@@ -42,8 +42,8 @@ class Agent2(object):
 
 
 
-    def get_trajectory(self,index):
-        
+    def get_trajectory(self):
+        index = np.random.randint(0, len(self.state)-self.batchSize+1)
         state = self.state[index:index+self.batchSize]
         action0=self.choose_action([state])
         action = action0-1
@@ -62,12 +62,12 @@ class Agent2(object):
     def get_trajectories(self):
 
         trajectories = []
-        #index = np.random.randint(0, len(self.state)-self.batchSize+1)
+        #
         index=0
         i=0
         while i < self.trajecNum and index<len(self.state)-self.batchSize+1:
             i += 1
-            trajectory = self.get_trajectory(index)
+            trajectory = self.get_trajectory()
             index +=1
             trajectories.append(trajectory)
         return trajectories

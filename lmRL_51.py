@@ -20,7 +20,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 class lmmodel(Agent2):
 
     def __init__(self, config,sess):
-        super(lmmodel,self).__init__('data/IF1601.CFE.csv', 20, 20,2)
+        super(lmmodel,self).__init__('data/IF1601.CFE.csv', 20, 20,1000)
         self.config = config
         self.sess = sess 
         #self.trajecNum=100  #
@@ -29,7 +29,7 @@ class lmmodel(Agent2):
         self.stepNum=20   #20 price sequence
         self.hiddenSize=40 # fully connected outputs
         self.neuronNum=10
-        self.actionsize=3
+        #self.actionsize=3
         #self.stateSize=[self.stepNum]
         
         self.buildNetwork()
@@ -93,10 +93,14 @@ class lmmodel(Agent2):
             self.probs = tf.nn.softmax(logits, name="action")
             self.action0 = tf.reduce_max(self.probs, axis=1)
             self.argAction = tf.argmax(self.probs, axis=1)
-            self.action = tf.reshape(self.action0,[-1,self.stepNum,3] )  #action change 
+            self.action = tf.reshape(self.action0,[-1,self.stepNum] )  #action change 
+
+            #print("action0")
+            #print(self.action0)
+            #print(self.critic_rewards)
 
             #loss,train
-            self.policyloss =policyloss  = tf.log(self.action0)*(self.critic_rewards-self.critic_feedback)
+            self.policyloss =policyloss  = tf.log(self.action)*(self.critic_rewards-self.critic_feedback)
             loss = tf.negative(tf.reduce_sum(policyloss),name="loss")
             tf.summary.scalar('actor_loss',loss)
 
@@ -123,8 +127,8 @@ class lmmodel(Agent2):
                 weights_initializer = tf.random_normal_initializer(),
                 biases_initializer = tf.zeros_initializer()
             )
-            print("critic states")
-            print(self.states)
+            #print("critic states")
+            #print(self.states)
 
             lstmcell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
             cell = tf.contrib.rnn.MultiRNNCell([lstmcell for _ in range(5)], state_is_tuple=True)
@@ -132,9 +136,9 @@ class lmmodel(Agent2):
             #num=tf.shape(critic_L1)[0]
             #for i in range(self.stepNum):
             #    seq_length.append(self.stepNum)
-            print("critic size")
+            #print("critic size")
            # print(self.stateSize)
-            print(critic_L1)
+            #print(critic_L1)
             outputs,states = tf.nn.dynamic_rnn(cell,critic_L1,dtype=tf.float32,sequence_length=self.seq_length)
 
             output=outputs
@@ -146,12 +150,12 @@ class lmmodel(Agent2):
             self.critic_value = tf.contrib.layers.fully_connected(
                 inputs=output,
                 num_outputs= 1, #hidden
-                activation_fn= tf.tanh,
+                activation_fn= None,
                 weights_initializer = tf.random_normal_initializer(),
                 biases_initializer = tf.zeros_initializer()
             )
-            print("critic")
-            print(self.critic_value)
+            #print("critic")
+            #print(self.critic_value)
             self.critic_value = tf.reshape(self.critic_value,[-1,self.stepNum])
 
             #loss,train
@@ -196,20 +200,22 @@ class lmmodel(Agent2):
             all_state.append(trajectory["state"] )
             all_returns.append(self.discount_rewards(trajectory["reward"], 0.99))
             seq_length.append(self.stepNum)
-        print("trastate")
-        print(np.shape(all_action))
-        print(np.shape(all_returns))
-        print(np.shape(all_state))
+            #print(np.sum(trajectory["reward"]))
+        #print("trastate")
+        #print(np.shape(all_action))
+        #print(np.shape(all_returns))
+        #print(np.shape(all_state))
 
         #print(self.stateSize)
         #all_returns=all_returns.reshape((-1,20))
         
         qw_new = self.sess.run(self.critic_value,feed_dict={self.states:all_state,self.seq_length:seq_length})
        # qw_new = qw_new.reshape(-1)
-        qw_new = tf.reshape(qw_new,[-1,self.stepNum])
-        print(qw_new)
+        qw_new = np.reshape(qw_new,[-1,self.stepNum])
+        #print(qw_new)
 
         val,ff= self.sess.run([self.critic_train,self.actor_train],feed_dict={
+                self.seq_length:seq_length,
                 self.critic_target:all_returns,
                 self.states: all_state,
                 self.critic_feedback:qw_new,
