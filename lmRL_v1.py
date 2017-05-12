@@ -1,5 +1,4 @@
 
-
 #MNIST with a BasicLSTMCell
 #try tf.app.run and def
 
