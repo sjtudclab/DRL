@@ -58,13 +58,16 @@ class Agent2(object):
 
 
 
-    def get_trajectory(self):
-        index = np.random.randint(0, len(self.state)-self.batchSize+1)
+    def get_trajectory(self,i):
+        #index = np.random.randint(0, len(self.state)-self.batchSize+1)
+        #state = self.state[index:index+self.batchSize]
         #state=[]
         #for item in self.state[index:index+self.batchSize]:
         #    state.append(item)
         #for item in self.dataBase[index:index+self.batchSize]:
         #    state.append(item)
+      
+        index = i*100
         state = self.state[index:index+self.batchSize]
         #print("state")
         #print(index)

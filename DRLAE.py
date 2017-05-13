@@ -1,4 +1,10 @@
 
+#功能是使用三层autoencoder训练中间一层，没有加入l1范数
+#autoencoder训练中间一层的参数仅仅作为第一层全连接的初始化参数，在进行bp时候会更新全部参数
+#训练数据是1601-1612一年的数据
+#训练数据batchsize为100，连续序列读入
+
+
 
 from __future__ import absolute_import
 from __future__ import division
@@ -82,7 +88,8 @@ class lmmodel(Agent2):
             #)
 
             #construct a lstmcell ,the size is neuronNum
-            cell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
+            lstmcell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
+            cell=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #lstmcell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
             #cell_drop=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #construct 5 layers of LSTM
@@ -98,23 +105,19 @@ class lmmodel(Agent2):
                     #outputs.append(tf.reshape(output,[-1]))
                     tf.get_variable_scope().reuse_variables()
 
-            #print("L1")
-            #print(L1)
+
             #state = cell.zero_state(1, tf.float32)
             #s_step= tf.unstack(L1) 
-            #print("s_step")
-            #print(s_step)
+
             #outputs=[]
             #with tf.variable_scope("actorScope"):
-                #for i in s_step:                 
-                #    ii=tf.reshape(i,[1,-1])
-                    #print("ii")
-                    #print(ii)
-                #    (output, state) = cell(ii, state)
-                    #print("output")
-                    #print(output)
-                #    outputs.append(tf.reshape(output,[-1]))
-                #    tf.get_variable_scope().reuse_variables()
+            #    for i in s_step:                 
+            #        ii=tf.reshape(i,[1,-1])
+
+            #        (output, state) = cell(ii, state)
+
+            #        outputs.append(tf.reshape(output,[-1]))
+            #        tf.get_variable_scope().reuse_variables()
 
             #print("outputs")
             #print(outputs)
@@ -133,13 +136,16 @@ class lmmodel(Agent2):
             self.policyloss =policyloss  = tf.log(self.action0)*self.critic_rewards
             loss = tf.negative(tf.reduce_mean(policyloss),name="loss")
             tf.summary.scalar('actor_loss',loss)
-            self.actor_train = tf.train.AdamOptimizer(0.01).minimize(loss)
+            #self.actor_train = tf.train.AdamOptimizer(0.01).minimize(loss)
 
 
-            #tvars = tf.trainable_variables()
-            #grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)
-            #optimizer = tf.train.GradientDescentOptimizer(0.01)
-            #self.actor_train = optimizer.apply_gradients(zip(grads, tvars))
+            self.atvars=tvars = tf.trainable_variables()
+            #print(tvars)
+            #self.gg=tf.gradients(loss, tvars)
+            self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)
+            print(self.agrads)
+            optimizer = tf.train.AdamOptimizer(0.01)
+            self.actor_train = optimizer.apply_gradients(zip(self.agrads, tvars))
 
 
 
@@ -162,7 +168,7 @@ class lmmodel(Agent2):
                 #biases_initializer = tf.zeros_initializer()
             #)
             #construct 5 layers of lstm
-            cell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
+            cell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
             #lstmcell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
             #cell_drop=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #cell = tf.contrib.rnn.MultiRNNCell([cell_drop for _ in range(2)], state_is_tuple=True)
@@ -210,13 +216,13 @@ class lmmodel(Agent2):
             #loss,train
             self.critic_loss=critic_loss = tf.reduce_mean(tf.square(self.critic_target - self.critic_value) , name ="loss" )
             tf.summary.scalar('critic_loss',self.critic_loss)
-            self.critic_train = tf.train.AdamOptimizer(0.01).minimize(critic_loss) #global_step
+            #self.critic_train = tf.train.AdamOptimizer(0.01).minimize(critic_loss) #global_step
 
-            #tvar = tf.trainable_variables()
+            self.ctvar=tvar = tf.trainable_variables()
             #self.gr=tf.gradients(critic_loss, tvar)
-            #self.grads, _ = tf.clip_by_global_norm(tf.gradients(critic_loss, tvar),5)
-            #optimizer = tf.train.GradientDescentOptimizer(0.01)
-            #self.critic_train = optimizer.apply_gradients(zip(self.grads, tvar))
+            self.cgrads, _ = tf.clip_by_global_norm(tf.gradients(critic_loss, tvar),5)
+            optimizer = tf.train.AdamOptimizer(0.01)
+            self.critic_train = optimizer.apply_gradients(zip(self.cgrads, tvar))
 
 
     def discount_rewards(self,x, gamma):
@@ -248,30 +254,47 @@ class lmmodel(Agent2):
                 #print("haha")
 
                 for i in range(int(np.floor(len(self.dataBase)/batchsize))):
-                    trajectory = self.get_trajectory()
+                    trajectory = self.get_trajectory(i)
                     action = trajectory["action"]
                     state = trajectory["state"]
-                    returns = self.discount_rewards(trajectory["reward"],0.99)
+                    #returns = self.discount_rewards(trajectory["reward"],0.99)
+                    returns = trajectory["reward"]
+                    tf.summary.scalar('return',np.sum(trajectory["reward"]))
 
                     qw_new = self.sess.run(self.critic_value,feed_dict={self.states:state})
                     qw_new = qw_new.reshape(-1)
 
+
+                    action3,loss,action2=self.sess.run([self.action0,self.policyloss,self.argAction],feed_dict={
+                        self.critic_target:returns,
+                        self.states: state,
+                        self.actions_taken: action,
+                        self.critic_feedback:qw_new,
+                        self.critic_rewards:returns})
+                   
                     if i%100==0:
-                        print("num:%d",i)
+                        #print("num:%d",i)
                         print(np.sum(trajectory["reward"]))
+                        #print("loss")
+                        print(action3)
+                        print(loss)
+                        print(action2)
                         #print(trajectory["reward"])
                         #print(action)
+              
                 
                     summary,criticResults, actorResults = self.sess.run([self.merged,self.critic_train,self.actor_train],feed_dict={
-                        self.w1:self.w,
-                        self.b1:self.b,
                         self.critic_target:returns,
                         self.states: state,
                         self.actions_taken: action,
                         self.critic_feedback:qw_new,
                         self.critic_rewards:returns
                     })
-                self.writer.add_summary(summary,k)
+
+                    
+                    #print("grads")
+                    #print(gg)
+                    self.writer.add_summary(summary,(k+1)*(i+1)*(j+1))
 
 
         #for i in range(10000):

@@ -1,3 +1,7 @@
+#训练数据是1601-1612一年的数据，测试集是1701-1703
+#训练数据batchsize为100，连续序列读入
+#功能是使用三层autoencoder训练中间一层，没有加入l1范数
+
 import tensorflow as tf 
 import numpy as np
 from Autoencoder import Autoencoder 
