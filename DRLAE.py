@@ -29,11 +29,11 @@ import os
 
 class lmmodel(Agent2):
 
-    def __init__(self, config,sess,W1,B1,FileList):
+    def __init__(self, config,sess,FileList):
         #super(lmmodel,self).__init__('data/IF1602.CFE.csv', 10, 240, 2000)
 
-        self.w=W1
-        self.b=B1
+        #self.w=W1
+        #self.b=B1
         self.L=FileList
 
         self.config = config
@@ -41,10 +41,10 @@ class lmmodel(Agent2):
         #self.sess = tf.InteractiveSession()
         #self.trajecNum=100  #
         #self.batchSize=20   #120 batchSize
-        self.inputSize=10  #20features
-        self.stepNum=100   #20 price sequence
+        self.inputSize=50  #20features
+        self.stepNum=1200   #20 price sequence
         self.hiddenSize=128 # fully connected outputs
-        self.neuronNum=100
+        self.neuronNum=20
         #self.actionsize=3
         self.buildNetwork()
         self.saver = tf.train.Saver(tf.global_variables())
@@ -75,35 +75,84 @@ class lmmodel(Agent2):
         with tf.variable_scope("Policy") :
  
             #construct one layer fully_connected Network
-            L1=tf.nn.relu(tf.matmul(self.states,self.w)+self.b)
-            #L1= tf.contrib.layers.fully_connected(
-            #    inputs=self.states,
-            #    num_outputs=self.hiddenSize, #hidden
-            #    activation_fn=tf.nn.relu,
-                #weights_initializer=tf.truncated_normal_initializer(stddev=1.0),
-                #biases_initializer=tf.zeros_initializer()
+            #L1=tf.nn.relu(tf.matmul(self.states,self.w)+self.b)
+            L0= tf.contrib.layers.fully_connected(
+                inputs=self.states,
+                num_outputs=self.hiddenSize, #hidden
+                activation_fn=tf.nn.relu,
+                weights_initializer=tf.truncated_normal_initializer(stddev=1.0),
+                biases_initializer=tf.zeros_initializer()
             #    weights_initializer=self.w1,
             #    biases_initializer=self.b1
                 #biases_initializer=tf.zeros_initializer()
+            )
+            L1= tf.contrib.layers.fully_connected(
+                inputs=L0,
+                num_outputs=self.hiddenSize, #hidden
+                activation_fn=tf.nn.relu,
+                weights_initializer=tf.truncated_normal_initializer(stddev=1.0),
+                biases_initializer=tf.zeros_initializer()
+            )
+            #L11= tf.contrib.layers.fully_connected(
+            #    inputs=L01,
+            #    num_outputs=self.hiddenSize, #hidden
+            #    activation_fn=tf.nn.relu,
+            #    weights_initializer=tf.truncated_normal_initializer(stddev=1.0),
+            #    biases_initializer=tf.zeros_initializer()
             #)
+
 
             #construct a lstmcell ,the size is neuronNum
             lstmcell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
-            cell=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
+            cell =tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #lstmcell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
             #cell_drop=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #construct 5 layers of LSTM
             #cell = tf.contrib.rnn.MultiRNNCell([cell_drop for _ in range(2)], state_is_tuple=True)
            
+            #RNN只记录当前状态的10维特征，不具有时间序列，记忆功能
             # initialize the lstmcell
-            state = cell.zero_state(self.stepNum, tf.float32)
+            #state = cell.zero_state(self.stepNum, tf.float32)
             # the feature ft has the length of inputSize
-            with tf.variable_scope("actorScope"):
-                for i in range(self.inputSize):
-                    te=tf.reshape(L1[:,i],[-1,1])
-                    (outputs, state) = cell(te, state)
+            #with tf.variable_scope("actorScope"):
+            #    for i in range(self.inputSize):
+            #        te=tf.reshape(L1[:,i],[-1,1])
+            #        (outputs, state) = cell(te, state)
                     #outputs.append(tf.reshape(output,[-1]))
-                    tf.get_variable_scope().reuse_variables()
+            #        tf.get_variable_scope().reuse_variables()
+            #nowinput = tf.reshape(L1,[-1,128,1])
+            #output,state = tf.nn.dynamic_rnn(cell,nowinput,dtype=tf.float32)
+            #outputs = state
+
+            #RNN记录当前时刻以及下一时刻的状态特征
+            #nowbatch = self.stepNum
+            #nowinput=[]
+            #start=tf.constant(0,dtype=tf.float32,shape=[128],name="zeros")
+            #print(L1[0,:])
+            #nowinput.append([start,L1[0,:]])
+            #for i in range(0,self.stepNum-1):
+            #    nowinput.append([L1[i,:],L1[i+1,:]])
+            #print(np.shape(nowinput))      
+            #state = cell.zero_state(nowbatch,tf.float32)
+            #nowinput = tf.reshape(nowinput,[-1,2,128])
+            #print(nowinput)
+            #outputs=[]
+
+            #with tf.variable_scope("policy"):
+            #    for i in range(2):
+            #        (outputs,states)=cell(nowinput[:,i,:],state)
+            #        tf.get_variable_scope().reuse_variables()
+            #系统下一时刻的状态仅由当前时刻的状态产生
+            nowinput = tf.reshape(L1,[-1,4,self.hiddenSize])
+            outputnew,statenew = tf.nn.dynamic_rnn(cell,nowinput,dtype=tf.float32)
+
+            #outputs = outputnew[:,1,:]
+            outputs = tf.reshape(outputnew,[-1,self.neuronNum])
+            #print("outputs")
+            #print(outputs)
+            #print(outputnew)
+           
+            
 
 
             #state = cell.zero_state(1, tf.float32)
@@ -132,20 +181,21 @@ class lmmodel(Agent2):
             self.argAction = tf.argmax(self.probs, axis=1)
 
             #loss,train
-            #self.policyloss =policyloss  = tf.log(self.action0)*(self.critic_rewards-self.critic_feedback)
-            self.policyloss =policyloss  = tf.log(self.action0)*self.critic_rewards
+            
+            self.policyloss =policyloss  = tf.log(self.action0)*(self.critic_rewards-self.critic_feedback)
+            #self.policyloss =policyloss  = tf.log(self.action0)*tf.reduce_sum(self.critic_rewards)
             loss = tf.negative(tf.reduce_mean(policyloss),name="loss")
-            tf.summary.scalar('actor_loss',loss)
-            #self.actor_train = tf.train.AdamOptimizer(0.01).minimize(loss)
+            tf.summary.scalar('actor_loss',tf.abs(loss))
+            self.actor_train = tf.train.AdamOptimizer(0.01).minimize(loss)
 
 
-            self.atvars=tvars = tf.trainable_variables()
+            #self.atvars=tvars = tf.trainable_variables() 得到可以训练的参数
             #print(tvars)
             #self.gg=tf.gradients(loss, tvars)
-            self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)
-            print(self.agrads)
-            optimizer = tf.train.AdamOptimizer(0.01)
-            self.actor_train = optimizer.apply_gradients(zip(self.agrads, tvars))
+            #self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)
+            #print(self.agrads)
+            #optimizer = tf.train.AdamOptimizer(0.001)
+            #self.actor_train = optimizer.apply_gradients(zip(self.agrads, tvars))
 
 
 
@@ -156,34 +206,50 @@ class lmmodel(Agent2):
             self.critic_target = tf.placeholder(tf.float32,name= "critic_target")
             
             #construct a layer of fully connected network
-            critic_L1=tf.nn.relu(tf.matmul(self.states,self.w)+self.b)
-            #critic_L1= tf.contrib.layers.fully_connected(
-            #    inputs=self.states,
-            #    num_outputs= self.hiddenSize, #hidden
-            #    activation_fn= tf.nn.relu,
-                #weights_initializer = tf.truncated_normal_initializer(stddev=1.0),
-                #biases_initializer = tf.zeros_initializer()
+            #critic_L1=tf.nn.relu(tf.matmul(self.states,self.w)+self.b)
+            critic_L1= tf.contrib.layers.fully_connected(
+                inputs=self.states,
+                num_outputs= self.hiddenSize, #hidden
+                activation_fn= tf.nn.relu,  #default
+                weights_initializer = tf.truncated_normal_initializer(stddev=1.0),
+                biases_initializer = tf.zeros_initializer()
             #    weights_initializer=self.w,
             #    biases_initializer=self.b
                 #biases_initializer = tf.zeros_initializer()
-            #)
+            )
             #construct 5 layers of lstm
-            cell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
+            lstmcell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
+            cell=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #lstmcell=tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True,activation=tf.nn.relu)
             #cell_drop=tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #cell = tf.contrib.rnn.MultiRNNCell([cell_drop for _ in range(2)], state_is_tuple=True)
 
-
-            state = cell.zero_state(self.stepNum, tf.float32)
-
-            # a feature has a length of inputSize
-            with tf.variable_scope("criticScope"):
-                for i in range(self.inputSize):
-                    cellinput=tf.reshape(critic_L1[:,i],[-1,1])
-                    (output, state) = cell(cellinput, state)
+            
+            #每个状态由前m个reward组成，LSTM由前m个reward来预测下一个状态的reward
+            #state = cell.zero_state(self.stepNum, tf.float32)
+            #with tf.variable_scope("criticScope"):
+            #    for i in range(self.inputSize):
+            #        cellinput=tf.reshape(critic_L1[:,i],[-1,1])
+            #        (output, state) = cell(cellinput, state)
                     #outputs.append(tf.reshape(output,[-1]))
-                    tf.get_variable_scope().reuse_variables()
+            #        tf.get_variable_scope().reuse_variables()
+            
+            nowinput = tf.reshape(critic_L1,[-1,4,self.hiddenSize])
+            outputnew,statenew = tf.nn.dynamic_rnn(cell,nowinput,dtype=tf.float32)
 
+            #outputs = outputnew[:,1,:]
+            output = tf.reshape(outputnew,[-1,self.neuronNum])
+            
+            #nowbatch = self.stepNum
+            #nowinput=[]
+            #start=tf.constant(0,dtype=tf.float32,shape=[128],name="zeros")
+            #nowinput.append([start,critic_L1[0,:]])
+            #for i in range(0,self.stepNum-1):
+            #    nowinput.append([critic_L1[i,:],critic_L1[i+1,:]])    
+            #nowinput = tf.reshape(nowinput,[-1,2,128])
+            #outputnew,statenew = tf.nn.dynamic_rnn(cell,nowinput,dtype=tf.float32)
+
+            #output = outputnew[:,1,:]
 
 
             #state = cell.zero_state(1, tf.float32) 
@@ -216,13 +282,13 @@ class lmmodel(Agent2):
             #loss,train
             self.critic_loss=critic_loss = tf.reduce_mean(tf.square(self.critic_target - self.critic_value) , name ="loss" )
             tf.summary.scalar('critic_loss',self.critic_loss)
-            #self.critic_train = tf.train.AdamOptimizer(0.01).minimize(critic_loss) #global_step
+            self.critic_train = tf.train.AdamOptimizer(0.01).minimize(critic_loss) #global_step
 
-            self.ctvar=tvar = tf.trainable_variables()
+            #self.ctvar=tvar = tf.trainable_variables()
             #self.gr=tf.gradients(critic_loss, tvar)
-            self.cgrads, _ = tf.clip_by_global_norm(tf.gradients(critic_loss, tvar),5)
-            optimizer = tf.train.AdamOptimizer(0.01)
-            self.critic_train = optimizer.apply_gradients(zip(self.cgrads, tvar))
+            #self.cgrads, _ = tf.clip_by_global_norm(tf.gradients(critic_loss, tvar),5)
+            #optimizer = tf.train.AdamOptimizer(0.001)
+            #self.critic_train = optimizer.apply_gradients(zip(self.cgrads, tvar))
 
 
     def discount_rewards(self,x, gamma):
@@ -238,6 +304,25 @@ class lmmodel(Agent2):
 
         return result
 
+    #在策略网络的损失函数中，采用一步截断优势函数，即A=rt+gamma*V(st+1)-V(st)
+    def policy_rew(self,r,v,gamma):
+        R = [0 for i in range(len(r))]
+        element = 0
+        for i in range(len(r)-1):
+            element = r[i] + gamma * v[i+1]
+            R[i] = element
+        #R[len(r)-1]=r[len(r)-1]默认最后一个状态R为0
+        return R
+
+    #在值函数网络中，target=rt+gamma*rt+1
+    def value_rew(self,r,gamma):
+        R = [0 for i in range(len(r))]
+        element = 0
+        for i in range(len(r)-1):
+            element = r[i] + gamma * r[i+1]
+            R[i] = element
+        return R
+
 
     def learn(self):
         self.merged = tf.summary.merge_all()
@@ -246,55 +331,146 @@ class lmmodel(Agent2):
         #i=0
         #for trajectory in trajectories:
         # loop 10000 times, each time get a trajectory
-        batchsize=100
-        epoch=10
-        for j in range(epoch):
-            for k in range(12):
-                super(lmmodel,self).__init__(self.L[2][k], 10, 100, 2000)
-                #print("haha")
+        batchsize=5000
+        epoch=1
+        #total=[]
+        #先对值函数网络进行预训练
+        valuefalse=False
+        if valuefalse:
+            for j in range(epoch):
+                for k in range(1):
+                    super(lmmodel,self).__init__(self.L[2][k], 50, 5000, 2000)
+                    #for i in range(int(np.floor(len(self.state)/batchsize))):
+                    #每次滑动5000，训练窗口大小为15000,TEST 为顺延的5000，batchsize大小设置为5000
+                    for i in range(0,len(self.state)-batchsize,5000):
+                        trajectory = self.get_trajectory(i)
+                        action = trajectory["action"]
+                        state = trajectory["state"]
+                        valueReturn=returns = trajectory["reward"]
+                      
+                        #valueReturn = self.value_rew(trajectory["reward"],0.98)
+                        critic_loss, critic_train = self.sess.run([self.critic_loss,self.critic_train],feed_dict={
+                            self.critic_target:valueReturn,
+                            self.states: state
+                        })
+                        if i%10 ==0:
+                            print("criticloss")
+                            #print(returns)
+                            print(j)
+                            print(critic_loss)
 
-                for i in range(int(np.floor(len(self.dataBase)/batchsize))):
-                    trajectory = self.get_trajectory(i)
-                    action = trajectory["action"]
-                    state = trajectory["state"]
-                    #returns = self.discount_rewards(trajectory["reward"],0.99)
-                    returns = trajectory["reward"]
-                    tf.summary.scalar('return',np.sum(trajectory["reward"]))
+        #预先保存IF0602数据
+        super(lmmodel,self).__init__(self.L[2][1], 50, 1200, 2000)
+        f2State = self.state
+        test_state=[]
+        test_num=0
+        for i in range(0,len(f2State)-batchsize-1,240):
+            test_state.append(f2State[i:i+batchsize]) 
+            test_num = test_num + 1
+            #print(test_state)
 
-                    qw_new = self.sess.run(self.critic_value,feed_dict={self.states:state})
-                    qw_new = qw_new.reshape(-1)
-
-
-                    action3,loss,action2=self.sess.run([self.action0,self.policyloss,self.argAction],feed_dict={
-                        self.critic_target:returns,
-                        self.states: state,
-                        self.actions_taken: action,
-                        self.critic_feedback:qw_new,
-                        self.critic_rewards:returns})
-                   
-                    if i%100==0:
-                        #print("num:%d",i)
-                        print(np.sum(trajectory["reward"]))
-                        #print("loss")
-                        print(action3)
-                        print(loss)
-                        print(action2)
-                        #print(trajectory["reward"])
-                        #print(action)
-              
-                
-                    summary,criticResults, actorResults = self.sess.run([self.merged,self.critic_train,self.actor_train],feed_dict={
-                        self.critic_target:returns,
-                        self.states: state,
-                        self.actions_taken: action,
-                        self.critic_feedback:qw_new,
-                        self.critic_rewards:returns
-                    })
-
+        trainfalse =True
+        if trainfalse:
+            for j in range(epoch):
+                for k in range(1):
+                    super(lmmodel,self).__init__(self.L[2][k], 50, 1200, 2000)
+                    #test_state=[]
+                    #print(int(np.floor(len(self.state)/batchsize)))
+                    #for i in range(int(np.floor(len(self.state)/batchsize))):
+                    #for i in range(len(self.state)-batchsize-1):
+                    #每次滑动5000，训练窗口大小为15000,TEST 为顺延的5000，batchsize大小设置为5000
+                    for i in range(0,len(self.state)-batchsize,5000):
+                        #trajectory = self.random_trajectory(i)
+                        trajectory = self.get_trajectory(i)
+                        action = trajectory["action"]
+                        state = trajectory["state"]
+                        #statenew =  trajectory["statenew"]
+                        #returns = self.discount_rewards(trajectory["reward"],0.98)
+                        returns = trajectory["reward"]
+                        #returns = self.policy_rew(trajectory["reward"],0.98)
+                        #valueReturn = self.value_rew(trajectory["reward"],0.98)
                     
-                    #print("grads")
-                    #print(gg)
-                    self.writer.add_summary(summary,(k+1)*(i+1)*(j+1))
+                        #记录reward
+                        #tf.summary.scalar('return',np.sum(trajectory["reward"]))
+                        #test_state=np.hstack(test_state,state)
+                        #test_state.append(state)
+
+                        #值函数网络在状态下产生的value,预训练值函数网络，未训练的值函数网络产生的值偏差过大，所以需要预训练
+                        qw_new = self.sess.run(self.critic_value,feed_dict={self.states:state})
+                        qw_new = qw_new.reshape(-1)
+                        returns=policyReturn = self.policy_rew(trajectory["reward"],qw_new,0.98)
+
+                        loss,action2=self.sess.run([self.policyloss,self.argAction],feed_dict={
+                            self.states: state,
+                            self.actions_taken: action,
+                            self.critic_feedback:qw_new,
+                            self.critic_rewards:returns})
+                    
+                        #测试每个月份数据第100次时产生的reward
+                        #测试IF1602数据回报
+                        if i%100==0:
+                            print("now")
+                            print(np.sum(trajectory["reward"]))
+                            if np.sum(trajectory["reward"])>100:
+                                print(trajectory["reward"])
+                            test_action=[]
+                            tenprew =0
+                            for i in range(test_num):
+                                test_action.append(self.choose_action(test_state[i]))
+                                tenprew =tenprew+ np.sum(self.get_reward(test_state[i],test_action[i]))
+                            print(np.mean(tenprew))
+                                #if i ==0 :
+                                    #print(test_action)
+
+                            #test_return = self.get_reward(test_state,test_action)
+                            #total=np.sum(test_return)
+                            #print("IF1602")
+                            #print(total)
+
+                
+                    
+                        summary,criticResults, actorResults = self.sess.run([self.merged,self.critic_train,self.actor_train],feed_dict={
+                        #summary,criticResults, actorResults = self.sess.run([self.merged,self.actor_train],feed_dict={
+                            #self.critic_target:valueReturn,
+                            self.critic_target:valueReturn,
+                            self.states: state,
+                            self.actions_taken: action,
+                            self.critic_feedback:qw_new,
+                            self.critic_rewards:returns
+                            #self.critic_rewards:policyReturn
+                        })
+
+                    self.writer.add_summary(summary,(k+1)*(j+1))
+                    
+                    #test_action
+                    #test_action=[]
+                    #for i in range(int(np.floor(len(self.state)/batchsize))):
+                        #print(np.shape(self.choose_action(test_state[i])))
+                        #print(test_actions)
+                    #    test_action.append(self.choose_action(test_state[i]))
+                        #if i>0:
+                        #    test_actions=np.vstack((test_actions,self.choose_action(test_state[i])))
+                        #if i==0:
+                        #    test_actions=self.choose_action(test_state[i])
+                    #print(test_action)
+
+                    #test_reward= self.get_reward(test_state,test_action)
+                    #print(np.sum(test_reward))
+                    #index = np.random.randint(0, len(self.state)-self.batchSize+1)
+                    #trajectory_test = self.get_trajectory(index)
+                    #test_returns = trajectory_test["reward"]
+                    #print("each month")
+                    #print(test_returns)
+                    #print(np.sum(test_returns))
+                    #total.append(np.sum(test_returns))
+            #print("total")
+            #print(total)
+
+
+
+        
+
+
 
 
         #for i in range(10000):
@@ -344,26 +520,29 @@ def main():
         for file in files:
             L.append(file) 
     #autoencoder pretrain w1, b1
-    autoencoder = Autoencoder(n_input = 10,n_hidden = 100,transfer_function = tf.nn.softplus,optimizer = tf.train.AdamOptimizer(learning_rate = 0.001))
+
+    #if train:
+    #autoencoder = Autoencoder(n_input = 10,n_hidden = 128,transfer_function = tf.nn.softplus,optimizer = tf.train.AdamOptimizer(learning_rate = 0.001))
 
     # train the whole file data
 
-    batchsize=100
-    epoch=10
+    
+    #batchsize=100
+    #epoch=1
     #print(np.floor(len(Agent.dataBase)/batchsize))
-    for j in range(epoch):
-        for k in range(12):
-            Agent=Agent2(L[2][k], 10, 100, 2000)
-            for i in range(int(np.floor(len(Agent.dataBase)/batchsize))):
-                #print(len(Agent.dataBase))
-                state = Agent.get_state(i)
-                cost = autoencoder.partial_fit(state)
-                if i % 10==0:
-                    print("cost")
-                    print(cost)
+    #for j in range(epoch):
+    #    for k in range(12):
+    #        Agent=Agent2(L[2][k], 10, 100, 2000)
+    #        for i in range(int(np.floor(len(Agent.dataBase)/batchsize))):
+    #            #print(len(Agent.dataBase))
+    #            state = Agent.get_state(i)
+    #            cost = autoencoder.partial_fit(state)
+    #            if i % 10==0:
+    #                print("cost")
+    #                print(cost)
 
-    w=autoencoder.getWeights()
-    b=autoencoder.getBiases()
+    #w=autoencoder.getWeights()
+    #b=autoencoder.getBiases()
 
 
 
@@ -374,17 +553,20 @@ def main():
 
     config=get_config()
     sess= tf.InteractiveSession()
+    trainable=True
+    if trainable:
 
-    out = lmmodel(config=config,sess=sess,W1=w,B1=b,FileList=L)
-    sess.run(tf.global_variables_initializer())
-    out.learn()
-    saver = tf.train.Saver(tf.global_variables())
-    save_path = out.saver.save(sess, '/home/swy/code/DRL/cpencoder/model.ckpt')
-
-
-    #out = lmmodel(config=config,sess=sess)
-    #load_path = out.saver.restore(sess,'/home/swy/code/DRL/cp/model.ckpt')
-    #out.learn()
+        #out = lmmodel(config=config,sess=sess,W1=w,B1=b,FileList=L)
+        out = lmmodel(config=config,sess=sess,FileList=L)
+        sess.run(tf.global_variables_initializer())
+        out.learn()
+        saver = tf.train.Saver(tf.global_variables())
+        save_path = out.saver.save(sess, '/home/swy/code/DRL/cpencoder/model.ckpt')
+    else:
+        #out = lmmodel(config=config,sess=sess,W1=w,B1=b,FileList=L)
+        out = lmmodel(config=config,sess=sess,FileList=L)
+        load_path = out.saver.restore(sess,'/home/swy/code/DRL/cpencoder/model.ckpt')
+        out.learn()
             #out=sess.run(out.train_step,feed_dict=feed_dict())
 
 

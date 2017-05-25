@@ -19,8 +19,8 @@ class Autoencoder(object):
         
         self.regularizer=tf.contrib.layers.l2_regularizer(0.001)
         # cost
-        self.cost = 0.5 * tf.reduce_sum(tf.pow(tf.subtract(self.reconstruction, self.x), 2.0))
-        #self.cost = tf.reduce_mean(tf.pow(tf.subtract(self.reconstruction, self.x), 2.0))+self.regularizer(self.weights['w1'])
+        #self.cost = 0.5 * tf.reduce_sum(tf.pow(tf.subtract(self.reconstruction, self.x), 2.0))
+        self.cost = tf.reduce_mean(tf.pow(tf.subtract(self.reconstruction, self.x), 2.0))+self.regularizer(self.weights['w1'])
         self.optimizer = optimizer.minimize(self.cost)
 
         init = tf.global_variables_initializer()

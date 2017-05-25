@@ -1,2 +1,2 @@
-model_checkpoint_path: "/home/swy/code/DRL/cpencoder/model.ckpt"
-all_model_checkpoint_paths: "/home/swy/code/DRL/cpencoder/model.ckpt"
+model_checkpoint_path: "/home/swy/code/DRL/cpencoder/model2400.ckpt"
+all_model_checkpoint_paths: "/home/swy/code/DRL/cpencoder/model2400.ckpt"
