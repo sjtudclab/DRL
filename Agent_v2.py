@@ -13,15 +13,11 @@ class Agent2(object):
         self.m = m
         self.batchSize = batchSize
         self.trajecNum = trajecNum
-        self.state = []
-        self.start = 0 #训练开始时，动作为0
-        self.begin = 0
 
         
         #跳过第一行
         f_matrix = np.loadtxt(open(fileName,'rb'),delimiter=',',skiprows=1)
         self.dataBase = f_matrix[:,4]
-        self.volume = f_matrix[:,5]
         
 
         #print(self.dataBase)
@@ -36,16 +32,10 @@ class Agent2(object):
         #按照价格序列
         for i in range(len(self.dataBase)):
             self.dataBase[i] = float(self.dataBase[i])
-        #    self.diff.append(self.dataBase[i])
-        #print("dataBase")
-        #print(len(self.dataBase))
         for i in range(1, len(self.dataBase)):
              self.diff.append(self.dataBase[i] - self.dataBase[i-1])
              
-        self.vol = self.volume[1:len(self.volume)] 
       
-
-
         #对数据进行归一化处理
         self.statenew = []
         mean = np.mean(self.diff)
@@ -54,7 +44,7 @@ class Agent2(object):
         for i in range(0,len(self.diff1)-m+1):
             self.statenew.append(self.diff1[i:i+m])
 
-
+        self.state = []
         for i in range(0,len(self.diff)-m):
             #state由前m个价差表示
             self.state.append(self.diff[i:i+m])
@@ -120,13 +110,13 @@ class Agent2(object):
         #index = i*100
         index = i
         state = self.state[index:index+self.batchSize]
-        #训练时候输入状态进行归一化处理
-        statenew = self.statenew[index:index+self.batchSize]
-        #action = self.choose_action(statenew)
-
-        action = self.choose_action(state)
+        print("state")
+        action0 = self.choose_action(state)
+        #print("action")
+        print(action0)
         #将action转换为-1,0,1
-        action = action -1
+        action = action0 -1
+        print("action")
 
         #重新定义reward
         #状态s0，采取动作a0，状态转移为s1，产生reward：p1-p0，a0产生的代价是，0到a0.最后一个状态产生reward为0
@@ -162,11 +152,12 @@ class Agent2(object):
                 rew = action[i-1] * state[i][-1] - 1* abs(action[i]-action[i-1])
                 #rew = action[i-1] * state[i][-1] 
             rewards.append(rew)
+        
+        #print(rewards)
 
         return {"reward":rewards,
                 "state": state,
-                "action": action,
-                "statenew":statenew
+                "action": action0
                 }
 
     def random_trajectory(self,i):

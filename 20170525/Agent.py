@@ -16,15 +16,15 @@ class Agent(object):
         #跳过第一行
         f_matrix = np.loadtxt(open(fileName,'rb'),delimiter=',',skiprows=1)
         
-        #价差
+        #价差，涨跌
         self.diff = f_matrix[:,7]
        
         self.state=[]
-        for i in len(self.diff):
+        for i in range(len(self.diff)):
             #每个时刻状态由（close，volume）
-            state = []
-            state.append(f_matrix[i,4])
-            state.append(f_matrix[i,5])
+            state = f_matrix[i,4:6]
+            #state.append(f_matrix[i,4])
+            #state.append(f_matrix[i,5])
             self.state.append(state)
 
     def get_trajectory(self,index,timeStep,batchSize): 
@@ -37,17 +37,22 @@ class Agent(object):
             batch.append(one)
             st = st + 1
         #batch size = [batchSize,timeStep,2]
-        print("state")
-        print(batch)
-
+            #if i == 0: #测试state是否正确
+            #    print("state")
+                #print(batch)
+        #print(np.shape(batch))  
+  
+        #！！！当前时刻状态由前timestep状态预测得到！！！
         action = self.choose_action(batch)
         action = action - 1
 
         #文章中的定义reward
         #在状态0时刻，不产生reward，但是当产生1，或者-1的时候，会产生手续费
         rewards = []
-        diff = self.diff[i+timeStep:i+timeStep+batchSize-1]
-        for i in range(action):
+        
+        diff = self.diff[index+timeStep:index+timeStep+batchSize] #不包含最后一个
+        #print(diff[0:5]) # 测试diff是否正确
+        for i in range(len(action)):
             if i==0:
 
                 rew = - 1* abs(action[i])
