@@ -19,14 +19,13 @@ import os
 class lmmodel(Agent):
 
     def __init__(self,sess,FileList):
-        #super(lmmodel,self).__init__('data/IF1602.CFE.csv', 10, 240, 2000)
 
         self.L=FileList
         self.sess =sess
-        self.inputSize=6  #2features
-        self.stepNum=10   #20 price sequence
+        self.inputSize=10  #10 features
+        self.stepNum=2   #20 price sequence
         self.hiddenSize=128 # fully connected outputs
-        self.neuronNum=100
+        self.neuronNum=20
         self.buildNetwork()
         self.saver = tf.train.Saver(tf.global_variables())
     
@@ -41,7 +40,7 @@ class lmmodel(Agent):
         self.critic_rewards = tf.placeholder(tf.float32,shape=[None],name= "critic_rewards")
         self.actions_taken = tf.placeholder(tf.int32,shape=[None,2],name= "actions_taken")
         self.new_lr = tf.placeholder(tf.float32,shape=[],name="learning_rate")
-        self.lr = tf.Variable(0.01,trainable=False)
+        self.lr = tf.Variable(0.1,trainable=False)
 
         # PolicyNetwork
         with tf.variable_scope("Policy") :
@@ -60,42 +59,46 @@ class lmmodel(Agent):
                 weights_initializer=tf.truncated_normal_initializer(stddev=1.0),
                 biases_initializer=tf.zeros_initializer()
             )
-
+            #outputs = L1[:,self.stepNum-1,:]
             #construct a lstmcell ,the size is neuronNum
             cell = tf.contrib.rnn.BasicLSTMCell(self.neuronNum, forget_bias=1.0, state_is_tuple=True)
             #cell =tf.contrib.rnn.DropoutWrapper(lstmcell, output_keep_prob=0.5)
             #cell = tf.contrib.rnn.MultiRNNCell([cell_drop for _ in range(2)], state_is_tuple=True)
            
             
-            #系统下一时刻的状态仅由当前时刻的状态产生
+            #系统状态由前stepnum个状态产生
             outputnew,statenew = tf.nn.dynamic_rnn(cell,L1,dtype=tf.float32)
             outputs = outputnew[:,self.stepNum-1,:] # 取最后一个step的结果
 
-            softmax_w = tf.get_variable( "softmax_w", [self.neuronNum, 3], dtype=tf.float32,initializer=tf.truncated_normal_initializer(stddev=1.0))
+            softmax_w = tf.get_variable( "softmax_w", [self.neuronNum, 3], dtype=tf.float32,initializer=tf.truncated_normal_initializer(stddev=1.0/math.sqrt(float(self.neuronNum))))
             softmax_b = tf.get_variable("softmax_b", [3], dtype=tf.float32,initializer=tf.zeros_initializer())
             logits = tf.matmul(outputs, softmax_w) + softmax_b
             self.probs = tf.nn.softmax(logits, name="action")
             # fetch the maximum probability
-            #self.action0 = tf.reduce_max(self.probs, axis=1)
+            self.action0 = tf.reduce_max(self.probs, axis=1)
             # fetch the index of the maximum probability
-            #self.argAction = tf.argmax(self.probs, axis=1)
+            self.argAction = tf.argmax(self.probs, axis=1)
 
-            self.argAction = tf.reshape(tf.multinomial(tf.log(self.probs),num_samples=1),[-1])
-            self.action0 = tf.gather_nd(self.probs,self.actions_taken)
-
-            critic_rew =tf.reshape(self.critic_rewards,[-1,10])
-            action = tf.reshape(self.action0,[-1,10])
-            self.policyloss = tf.reduce_sum(critic_rew*action,1)
-            loss = tf.negative(tf.reduce_mean(cost),name = "loss")
+            #self.argAction = tf.reshape(tf.multinomial(tf.log(self.probs),num_samples=1),[-1])
+            #self.action0 = tf.gather_nd(self.probs,self.actions_taken)
+            
+            #法1：关于loss的定义，用rnn的timestep进行求和求均值
+            #critic_rew =tf.reshape(self.critic_rewards,[-1,self.stepNum])
+            #action = tf.reshape(self.action0,[-1,self.stepNum])
+            #self.policyloss = tf.reduce_sum(critic_rew*action,1)
+            #loss = tf.negative(tf.reduce_mean(self.policyloss),name = "loss")
             #print(critic_rew*action)
 
-            #loss,train
             #self.entropy = -tf.reduce_sum(self.probs * tf.log(self.probs), 1, name="entropy")
-            #self.lr_update = tf.assign(self.lr,self.new_lr)
+            #loss = tf.negative(tf.reduce_sum(self.entropy ),name="loss")
+
+            #法2：关于loss的定义，整个序列长度求和
+            self.lr_update = tf.assign(self.lr,self.new_lr)
+            #self.entropy = tf.reduce_sum(self.probs * tf.log(self.probs), 1, name="entropy")
             #self.policyloss = policyloss  = tf.log(self.action0)*self.critic_rewards + 0.01 * self.entropy
             #self.policyloss = policyloss  = tf.log(tf.clip_by_value(self.action0,1e-10,1.0))*self.critic_rewards 
-            #self.policyloss = policyloss  = tf.log(self.action0)*self.critic_rewards 
-            #loss = tf.negative(tf.reduce_sum(policyloss),name="loss")
+            self.policyloss = policyloss  = tf.log(self.action0)*self.critic_rewards 
+            self.loss = loss = tf.negative(tf.reduce_sum(policyloss),name="loss")
             #loss = tf.negative(policyloss,name="loss")
 
             #tf.summary.scalar('actor_loss',tf.abs(loss))
@@ -107,8 +110,7 @@ class lmmodel(Agent):
             #self.actor_train = optimizer.apply_gradients(capped_gvs)
             
             #self.tvars = tvars = tf.trainable_variables() #得到可以训练的参数
-            #self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)  #防止梯度爆炸
-            #self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),5)  #防止梯度爆炸
+            #self.agrads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),1)  #防止梯度爆炸
             #optimizer = tf.train.AdamOptimizer(self.lr)
             #self.actor_train = optimizer.apply_gradients(zip(self.agrads, tvars))
 
@@ -155,9 +157,9 @@ class lmmodel(Agent):
         #self.writer = tf.summary.FileWriter("/home/swy/code/DRL/tbencoder", self.sess.graph) 
         # 5 days
         batchsize=240
-        timestep = 10
-        epoch=3
-        max_epoch=2
+        timestep =self.stepNum
+        epoch=100
+        max_epoch=1
         learningrate = 0.1
 
         trainfalse =True
@@ -182,6 +184,7 @@ class lmmodel(Agent):
 
                                 trajectory = self.get_trajectory(i,timestep,batchsize)
                                 state = trajectory["state"]
+                                #print(state)
                                 action = trajectory["action"]
                                 actions = []
                                 for m in range(len(action)):
@@ -190,9 +193,12 @@ class lmmodel(Agent):
                                 #returns = self.discount_rewards(trajectory["reward"],0.95)
                                 
                                 #rewards = returns = trajectory["reward"]
+                                
+                                #reward = np.reshape(returns,(-1,self.stepNum))
+                                #rewards = self.discount_and_normalize_rewards(reward,0.95)
                                 returns =trajectory["reward"]
-                                reward = np.reshape(returns,(-1,10))
-                                rewards = self.discount_and_normalize_rewards(reward,0.95)
+                                rewards = self.discount_and_normalize_rewards([returns],0.95)
+
                                 if rewards == 0 :
                                     print("over")
                                     continue
@@ -208,16 +214,21 @@ class lmmodel(Agent):
                                     total.append(np.sum(returns))
                                     #print(np.sum(returns))
                                     
-                                    probs, loss,L1= self.sess.run([self.probs,self.policyloss,self.L1],feed_dict={
+                                    probs,loss,arg,act0= self.sess.run([self.probs,self.loss,self.argAction,self.action0],feed_dict={
                                         self.states: state,
                                         self.critic_rewards:rewards,
                                         self.actions_taken:actions
                                     })
                                     #print(np.shape(L1))
-                                    #print("L1")
+                                    #print("loss")
+                                    print(loss)
                                     #print(L1[1,2,:])
-                                    print("probs")
-                                    print(probs)
+                                    #print("probs")
+                                    #print(probs)
+                                    #print(arg)
+                                    #print(action)
+                                    #print(act0)
+                                    
                                     #print("grads")
                                     #print(agrads)
                                     #print("tvars")
@@ -231,8 +242,8 @@ class lmmodel(Agent):
                                         self.critic_rewards:rewards,
                                         self.actions_taken:actions
                                     })
-                                    print("action")
-                                    print(action)
+                                    #print("action")
+                                    #print(action)
                                     #print(np.shape(tvars))
                                     
                                    # print("tvar")
@@ -241,14 +252,12 @@ class lmmodel(Agent):
 
  
                             
-                print("total")
-                print(np.sum(total))
-                print(win/sum)
-                plt.figure()
-                x_values = range(len(total))
-                y_values = total
-                plt.plot(x_values, y_values)
-                plt.savefig(str(j)+'.png')
+                    #plt.figure()
+                    #x_values = range(len(total))
+                    #y_values = total
+                    #plt.plot(x_values, y_values)
+                    #plt.savefig(str(k)+'.png')
+                    #plt.show()
                     
         #self.writer.close()
 

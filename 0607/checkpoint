@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/swy/code/DRL/0607/model0606_d1.ckpt"
+all_model_checkpoint_paths: "/home/swy/code/DRL/0607/model0606_d1.ckpt"
